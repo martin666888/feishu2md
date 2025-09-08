@@ -6,10 +6,41 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
-.venv
+# Virtual environments (local)
+venv/
 
+# Environment variables (secrets)
+.env
+.env.*
 
+# Logs
+*.log
+
+# Runtime outputs (project-specific)
+output/
+temp/
+backups/
+
+# IDE/Editor configs
+.vscode/
+.idea/
+*.code-workspace
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# C-extension artifacts
+*.pyd
+
+# Test cache & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Packaging metadata
+pip-wheel-metadata/
 .qoder
 .trae
 .mypy_cache

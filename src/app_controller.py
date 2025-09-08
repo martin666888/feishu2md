@@ -2,10 +2,12 @@
 import sys
 import threading
 import traceback
+import os
 from typing import Optional
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QObject, pyqtSlot
+from PyQt6.QtGui import QIcon
 
 from src.api.feishu_client import FeishuAPIClient
 from src.converter.markdown_converter import MarkdownConverter
@@ -13,6 +15,18 @@ from src.gui.main_window import MainWindow
 from src.gui.preview_window import PreviewWindow
 from src.gui.settings_window import SettingsWindow
 from src.utils.file_manager import FileManager
+
+# 在打包(onefile)与开发环境中均可用的资源路径解析函数
+from pathlib import Path
+
+def resource_path(relative_path: str) -> str:
+    """获取资源文件的实际路径，兼容PyInstaller onefile和开发环境"""
+    try:
+        base_path = sys._MEIPASS  # type: ignore[attr-defined]
+    except Exception:
+        # 项目根目录：当前文件位于 src/ 下，父级即为项目根
+        base_path = Path(__file__).resolve().parent.parent
+    return str(Path(base_path) / relative_path)
 
 
 class AppController(QObject):
@@ -30,10 +44,26 @@ class AppController(QObject):
         # 创建QApplication实例
         self.app = QApplication(sys.argv)
         
+        # 设置全局应用图标（窗口会继承该图标）
+        try:
+            icon_path = resource_path("icon.ico")
+            self.app.setWindowIcon(QIcon(icon_path))
+        except Exception:
+            pass
+        
         # GUI组件
         self.main_window = MainWindow()
         self.preview_window = PreviewWindow(self.main_window)
         self.settings_window = SettingsWindow(self.file_manager, self.main_window)
+        
+        # 确保各窗口也显式设置图标（在某些Windows环境下更稳妥）
+        try:
+            icon = self.app.windowIcon()
+            self.main_window.setWindowIcon(icon)
+            self.preview_window.setWindowIcon(icon)
+            self.settings_window.setWindowIcon(icon)
+        except Exception:
+            pass
         
         # 数据
         self.current_markdown = ""
