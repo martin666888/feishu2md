@@ -27,11 +27,11 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 try:
-    import tkinter as tk
-    from tkinter import messagebox
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+    from PyQt6.QtCore import Qt
 except ImportError:
-    print("错误: 无法导入tkinter模块")
-    print("请确保您的Python安装包含tkinter支持")
+    print("错误: 无法导入PyQt6模块")
+    print("请确保PyQt6已正确安装")
     sys.exit(1)
 
 try:
@@ -46,7 +46,8 @@ def check_dependencies():
     """检查依赖包是否已安装"""
     required_packages = [
         ('lark_oapi', 'lark-oapi'),
-        ('requests', 'requests')
+        ('requests', 'requests'),
+        ('PyQt6', 'PyQt6')
     ]
     
     missing_packages = []
@@ -69,12 +70,10 @@ uv add {' '.join(missing_packages)}"""
         
         print(error_msg)
         
-        # 如果tkinter可用，显示图形化错误消息
+        # 如果PyQt6可用，显示图形化错误消息
         try:
-            root = tk.Tk()
-            root.withdraw()  # 隐藏主窗口
-            messagebox.showerror("依赖包缺失", error_msg)
-            root.destroy()
+            app = QApplication(sys.argv)
+            QMessageBox.critical(None, "依赖包缺失", error_msg)
         except:
             pass
         
@@ -102,6 +101,8 @@ def setup_environment():
 
 def main():
     """主函数"""
+    app_controller = None
+    
     try:
         print("飞书文档转Markdown工具 v1.0.0")
         print("正在启动...")
@@ -114,15 +115,15 @@ def main():
         setup_environment()
         
         # 创建并运行应用程序
-        app = AppController()
+        app_controller = AppController()
         
         print("应用程序启动成功")
         print("请在GUI界面中进行操作")
         
         # 运行应用程序
-        app.run()
+        exit_code = app_controller.run()
         
-        return 0
+        return exit_code
         
     except KeyboardInterrupt:
         print("\n用户中断程序")
@@ -135,14 +136,20 @@ def main():
         
         # 尝试显示图形化错误消息
         try:
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror("程序错误", error_msg)
-            root.destroy()
+            app = QApplication(sys.argv)
+            QMessageBox.critical(None, "程序错误", error_msg)
         except:
             pass
         
         return 1
+    
+    finally:
+        # 确保应用程序正确关闭
+        if app_controller:
+            try:
+                app_controller.shutdown()
+            except:
+                pass
 
 
 if __name__ == "__main__":

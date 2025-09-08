@@ -1,285 +1,371 @@
-"""主窗口GUI模块"""
-import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, filedialog
-import threading
+"""主窗口GUI模块 - PyQt6版本"""
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                            QLabel, QLineEdit, QPushButton, QProgressBar, 
+                            QTextEdit, QCheckBox, QFrame, QFileDialog,
+                            QMessageBox, QFormLayout, QGroupBox)
+from PyQt6.QtCore import pyqtSignal, Qt, QThread, pyqtSlot
+from PyQt6.QtGui import QFont
 import os
-from typing import Callable, Optional
+from typing import Optional, Callable
+import datetime
 
 
-class MainWindow:
-    """主窗口类"""
+class MainWindow(QMainWindow):
+    """主窗口类 - PyQt6版本"""
     
-    def __init__(self, root: tk.Tk):
-        """初始化主窗口
-        
-        Args:
-            root: Tkinter根窗口
-        """
-        self.root = root
-        self.setup_window()
-        self.create_widgets()
-        
-        # 回调函数
-        self.on_convert_callback: Optional[Callable] = None
-        self.on_preview_callback: Optional[Callable] = None
-        self.on_settings_callback: Optional[Callable] = None
+    # 定义信号
+    conversion_started = pyqtSignal(str, str)  # token, doc_id
+    preview_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
+    progress_updated = pyqtSignal(float, str)  # value, message
+    conversion_complete = pyqtSignal(bool, str)  # success, message
+    status_logged = pyqtSignal(str, str)  # message, level
+    
+    def __init__(self):
+        """初始化主窗口"""
+        super().__init__()
         
         # 状态变量
         self.is_converting = False
-    
-    def setup_window(self):
-        """设置窗口属性"""
-        self.root.title("飞书文档转Markdown工具")
-        self.root.geometry("800x600")
-        self.root.resizable(True, True)
         
-        # 设置窗口图标（如果有的话）
-        try:
-            # self.root.iconbitmap('icon.ico')
-            pass
-        except:
-            pass
+        # 设置窗口属性
+        self.setup_window()
         
-        # 设置主题颜色
-        self.colors = {
-            'primary': '#2F54EB',
-            'success': '#52C41A',
-            'error': '#FF4D4F',
-            'warning': '#FAAD14',
-            'background': '#FFFFFF',
-            'text': '#000000',
-            'border': '#D9D9D9'
-        }
-    
-    def create_widgets(self):
-        """创建界面组件"""
-        # 创建主框架
-        main_frame = ttk.Frame(self.root, padding="20")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # 初始化UI
+        self.init_ui()
         
-        # 配置网格权重
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        
-        # 标题
-        title_label = ttk.Label(main_frame, text="飞书文档转Markdown工具", 
-                               font=('Arial', 16, 'bold'))
-        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
-        
-        # 输入区域框架
-        input_frame = ttk.LabelFrame(main_frame, text="输入信息", padding="15")
-        input_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 20))
-        input_frame.columnconfigure(1, weight=1)
-        
-        # User Access Token输入
-        ttk.Label(input_frame, text="User Access Token:").grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
-        self.token_var = tk.StringVar()
-        self.token_entry = ttk.Entry(input_frame, textvariable=self.token_var, show="*", width=50)
-        self.token_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=(0, 10))
-        
-        # 显示/隐藏token按钮
-        self.show_token_var = tk.BooleanVar()
-        self.show_token_btn = ttk.Checkbutton(input_frame, text="显示", variable=self.show_token_var,
-                                            command=self.toggle_token_visibility)
-        self.show_token_btn.grid(row=0, column=2, padx=(10, 0), pady=(0, 10))
-        
-        # Document ID输入
-        ttk.Label(input_frame, text="Document ID:").grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
-        self.doc_id_var = tk.StringVar()
-        self.doc_id_entry = ttk.Entry(input_frame, textvariable=self.doc_id_var, width=50)
-        self.doc_id_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=(0, 10))
-        
-        # 输出路径选择
-        ttk.Label(input_frame, text="输出路径:").grid(row=2, column=0, sticky=tk.W, pady=(0, 10))
-        
-        # 输出路径框架
-        output_path_frame = ttk.Frame(input_frame)
-        output_path_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=(0, 10))
-        output_path_frame.columnconfigure(0, weight=1)
-        
-        # 输出路径输入框
-        self.output_path_var = tk.StringVar()
-        self.output_path_entry = ttk.Entry(output_path_frame, textvariable=self.output_path_var, width=40)
-        self.output_path_entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 5))
-        
-        # 浏览按钮
-        self.browse_btn = ttk.Button(output_path_frame, text="浏览", command=self.browse_output_path)
-        self.browse_btn.grid(row=0, column=1)
-        
-        # 使用默认路径按钮
-        self.default_path_btn = ttk.Button(output_path_frame, text="默认", command=self.use_default_path)
-        self.default_path_btn.grid(row=0, column=2, padx=(5, 0))
-        
-        # 输入验证提示
-        self.validation_label = ttk.Label(input_frame, text="", foreground=self.colors['error'])
-        self.validation_label.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
-        
-        # 控制按钮框架
-        control_frame = ttk.Frame(main_frame)
-        control_frame.grid(row=2, column=0, columnspan=3, pady=(0, 20))
-        
-        # 转换按钮
-        self.convert_btn = ttk.Button(control_frame, text="开始转换", 
-                                    command=self.start_conversion,
-                                    style='Accent.TButton')
-        self.convert_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # 预览按钮
-        self.preview_btn = ttk.Button(control_frame, text="预览结果", 
-                                    command=self.show_preview,
-                                    state=tk.DISABLED)
-        self.preview_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # 设置按钮
-        self.settings_btn = ttk.Button(control_frame, text="设置", 
-                                     command=self.show_settings)
-        self.settings_btn.pack(side=tk.LEFT)
-        
-        # 进度条
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(main_frame, variable=self.progress_var, 
-                                          mode='determinate', length=400)
-        self.progress_bar.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        # 状态显示区域
-        status_frame = ttk.LabelFrame(main_frame, text="状态信息", padding="10")
-        status_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 20))
-        status_frame.columnconfigure(0, weight=1)
-        status_frame.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(4, weight=1)
-        
-        # 状态文本区域
-        self.status_text = scrolledtext.ScrolledText(status_frame, height=15, width=80, 
-                                                   wrap=tk.WORD, state=tk.DISABLED)
-        self.status_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # 底部按钮框架
-        bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E))
-        bottom_frame.columnconfigure(0, weight=1)
-        
-        # 清空日志按钮
-        self.clear_log_btn = ttk.Button(bottom_frame, text="清空日志", 
-                                      command=self.clear_status_log)
-        self.clear_log_btn.grid(row=0, column=0, sticky=tk.W)
-        
-        # 关于按钮
-        self.about_btn = ttk.Button(bottom_frame, text="关于", 
-                                  command=self.show_about)
-        self.about_btn.grid(row=0, column=1, sticky=tk.E)
-        
-        # 绑定事件
-        self.token_var.trace('w', self.validate_inputs)
-        self.doc_id_var.trace('w', self.validate_inputs)
-        
-        # 初始化输出路径为默认值
-        self.use_default_path()
+        # 设置连接
+        self.setup_connections()
         
         # 初始化状态
         self.log_status("应用程序已启动，请输入Token和Document ID")
     
-    def toggle_token_visibility(self):
-        """切换token显示/隐藏"""
-        if self.show_token_var.get():
-            self.token_entry.config(show="")
-        else:
-            self.token_entry.config(show="*")
+    def setup_window(self):
+        """设置窗口属性"""
+        self.setWindowTitle("飞书文档转Markdown工具")
+        self.setGeometry(100, 100, 800, 600)
+        
+        # 设置窗口图标（如果有的话）
+        try:
+            # self.setWindowIcon(QIcon('icon.ico'))
+            pass
+        except:
+            pass
     
-    def validate_inputs(self, *args):
+    def init_ui(self):
+        """初始化界面组件"""
+        # 创建中央部件
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # 创建主布局
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        
+        # 标题
+        title_label = QLabel("飞书文档转Markdown工具")
+        title_font = QFont("Arial", 16, QFont.Weight.Bold)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(title_label)
+        
+        # 输入区域
+        input_group = QGroupBox("输入信息")
+        input_layout = QFormLayout(input_group)
+        
+        # User Access Token输入
+        token_layout = QHBoxLayout()
+        self.token_entry = QLineEdit()
+        self.token_entry.setEchoMode(QLineEdit.EchoMode.Password)
+        token_layout.addWidget(self.token_entry)
+        
+        self.show_token_checkbox = QCheckBox("显示")
+        token_layout.addWidget(self.show_token_checkbox)
+        
+        input_layout.addRow("User Access Token:", token_layout)
+        
+        # Document ID输入
+        self.doc_id_entry = QLineEdit()
+        input_layout.addRow("Document ID:", self.doc_id_entry)
+        
+        # 输出路径选择
+        output_path_layout = QHBoxLayout()
+        self.output_path_entry = QLineEdit()
+        output_path_layout.addWidget(self.output_path_entry)
+        
+        self.browse_btn = QPushButton("浏览")
+        self.default_path_btn = QPushButton("默认")
+        output_path_layout.addWidget(self.browse_btn)
+        output_path_layout.addWidget(self.default_path_btn)
+        
+        input_layout.addRow("输出路径:", output_path_layout)
+        
+        # 输入验证提示
+        self.validation_label = QLabel("")
+        self.validation_label.setStyleSheet("color: red;")
+        input_layout.addRow("", self.validation_label)
+        
+        main_layout.addWidget(input_group)
+        
+        # 控制按钮
+        control_layout = QHBoxLayout()
+        
+        self.convert_btn = QPushButton("开始转换")
+        self.convert_btn.setProperty("class", "primary-button")
+        
+        self.preview_btn = QPushButton("预览结果")
+        self.preview_btn.setEnabled(False)
+        
+        self.settings_btn = QPushButton("设置")
+        
+        control_layout.addWidget(self.convert_btn)
+        control_layout.addWidget(self.preview_btn)
+        control_layout.addWidget(self.settings_btn)
+        control_layout.addStretch()
+        
+        main_layout.addLayout(control_layout)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        main_layout.addWidget(self.progress_bar)
+        
+        # 状态显示区域
+        status_group = QGroupBox("状态信息")
+        status_layout = QVBoxLayout(status_group)
+        
+        self.status_text = QTextEdit()
+        self.status_text.setReadOnly(True)
+        self.status_text.setMaximumHeight(300)
+        status_layout.addWidget(self.status_text)
+        
+        main_layout.addWidget(status_group)
+        
+        # 底部按钮
+        bottom_layout = QHBoxLayout()
+        
+        self.clear_log_btn = QPushButton("清空日志")
+        self.about_btn = QPushButton("关于")
+        
+        bottom_layout.addWidget(self.clear_log_btn)
+        bottom_layout.addStretch()
+        bottom_layout.addWidget(self.about_btn)
+        
+        main_layout.addLayout(bottom_layout)
+        
+        # 设置样式
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #ffffff;
+            }
+            
+            QGroupBox {
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+            
+            QPushButton {
+                min-width: 80px;
+                padding: 5px 15px;
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                background-color: #ffffff;
+            }
+            
+            QPushButton:hover {
+                background-color: #f5f5f5;
+            }
+            
+            QPushButton:pressed {
+                background-color: #e6e6e6;
+            }
+            
+            QPushButton[class="primary-button"] {
+                background-color: #2F54EB;
+                color: white;
+                border: 1px solid #2F54EB;
+            }
+            
+            QPushButton[class="primary-button"]:hover {
+                background-color: #4056D1;
+            }
+            
+            QPushButton[class="primary-button"]:pressed {
+                background-color: #3448C7;
+            }
+            
+            QPushButton:disabled {
+                background-color: #f5f5f5;
+                color: #999999;
+                border: 1px solid #d9d9d9;
+            }
+            
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+            }
+            
+            QTextEdit {
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            
+            QProgressBar {
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                text-align: center;
+            }
+            
+            QProgressBar::chunk {
+                background-color: #2F54EB;
+            }
+        """)
+        
+        # 初始化输出路径为默认值
+        self.use_default_path()
+    
+    def setup_connections(self):
+        """设置信号槽连接"""
+        # 按钮点击事件
+        self.convert_btn.clicked.connect(self.start_conversion)
+        self.preview_btn.clicked.connect(self.show_preview)
+        self.settings_btn.clicked.connect(self.show_settings)
+        self.browse_btn.clicked.connect(self.browse_output_path)
+        self.default_path_btn.clicked.connect(self.use_default_path)
+        self.clear_log_btn.clicked.connect(self.clear_status_log)
+        self.about_btn.clicked.connect(self.show_about)
+        
+        # 输入验证
+        self.token_entry.textChanged.connect(self.validate_inputs)
+        self.doc_id_entry.textChanged.connect(self.validate_inputs)
+        
+        # 显示/隐藏token
+        self.show_token_checkbox.toggled.connect(self.toggle_token_visibility)
+        
+        # 内部信号连接
+        self.progress_updated.connect(self.on_update_progress)
+        self.conversion_complete.connect(self.on_conversion_complete)
+        self.status_logged.connect(self.on_log_status)
+    
+    def toggle_token_visibility(self, checked: bool):
+        """切换token显示/隐藏"""
+        if checked:
+            self.token_entry.setEchoMode(QLineEdit.EchoMode.Normal)
+        else:
+            self.token_entry.setEchoMode(QLineEdit.EchoMode.Password)
+    
+    def validate_inputs(self):
         """验证输入"""
-        token = self.token_var.get().strip()
-        doc_id = self.doc_id_var.get().strip()
+        token = self.token_entry.text().strip()
+        doc_id = self.doc_id_entry.text().strip()
         
         # 清空之前的验证信息
-        self.validation_label.config(text="")
+        self.validation_label.setText("")
         
         # 验证token
         if token and not token.startswith('u-'):
-            self.validation_label.config(text="Token格式错误，应以'u-'开头")
-            self.convert_btn.config(state=tk.DISABLED)
+            self.validation_label.setText("Token格式错误，应以'u-'开头")
+            self.convert_btn.setEnabled(False)
             return
         
         # 验证document_id
         if doc_id and len(doc_id) < 10:
-            self.validation_label.config(text="Document ID格式错误，长度过短")
-            self.convert_btn.config(state=tk.DISABLED)
+            self.validation_label.setText("Document ID格式错误，长度过短")
+            self.convert_btn.setEnabled(False)
             return
         
         # 检查是否都已填写
         if token and doc_id:
-            self.convert_btn.config(state=tk.NORMAL)
+            self.convert_btn.setEnabled(True)
         else:
-            self.convert_btn.config(state=tk.DISABLED)
+            self.convert_btn.setEnabled(False)
     
     def start_conversion(self):
         """开始转换"""
         if self.is_converting:
             return
         
-        token = self.token_var.get().strip()
-        doc_id = self.doc_id_var.get().strip()
+        token = self.token_entry.text().strip()
+        doc_id = self.doc_id_entry.text().strip()
         
         if not token or not doc_id:
-            messagebox.showerror("错误", "请填写完整的Token和Document ID")
+            QMessageBox.warning(self, "错误", "请填写完整的Token和Document ID")
             return
         
         # 禁用转换按钮
-        self.convert_btn.config(state=tk.DISABLED, text="转换中...")
+        self.convert_btn.setEnabled(False)
+        self.convert_btn.setText("转换中...")
         self.is_converting = True
         
         # 重置进度条
-        self.progress_var.set(0)
+        self.progress_bar.setValue(0)
         
-        # 在新线程中执行转换
-        if self.on_convert_callback:
-            thread = threading.Thread(target=self._conversion_thread, 
-                                     args=(token, doc_id))
-            thread.daemon = True
-            thread.start()
+        # 发射信号
+        self.conversion_started.emit(token, doc_id)
     
-    def _conversion_thread(self, token: str, doc_id: str):
-        """转换线程"""
-        try:
-            if self.on_convert_callback:
-                self.on_convert_callback(token, doc_id)
-        except Exception as e:
-            self.root.after(0, lambda: self.conversion_error(str(e)))
-    
-    def conversion_complete(self, success: bool, message: str = ""):
-        """转换完成回调"""
+    @pyqtSlot(bool, str)
+    def on_conversion_complete(self, success: bool, message: str = ""):
+        """转换完成槽函数"""
         self.is_converting = False
-        self.convert_btn.config(state=tk.NORMAL, text="开始转换")
+        self.convert_btn.setEnabled(True)
+        self.convert_btn.setText("开始转换")
         
         if success:
-            self.progress_var.set(100)
-            self.preview_btn.config(state=tk.NORMAL)
+            self.progress_bar.setValue(100)
+            self.preview_btn.setEnabled(True)
             self.log_status(f"转换成功: {message}", "success")
-            messagebox.showinfo("成功", "文档转换完成！")
+            QMessageBox.information(self, "成功", "文档转换完成！")
         else:
-            self.progress_var.set(0)
+            self.progress_bar.setValue(0)
             self.log_status(f"转换失败: {message}", "error")
-            messagebox.showerror("错误", f"转换失败: {message}")
+            QMessageBox.critical(self, "错误", f"转换失败: {message}")
     
-    def conversion_error(self, error_message: str):
-        """转换错误回调"""
-        self.conversion_complete(False, error_message)
-    
-    def update_progress(self, value: float, message: str = ""):
-        """更新进度"""
-        self.progress_var.set(value)
+    @pyqtSlot(float, str)
+    def on_update_progress(self, value: float, message: str = ""):
+        """更新进度槽函数"""
+        self.progress_bar.setValue(int(value))
         if message:
             self.log_status(message)
     
+    @pyqtSlot(str, str)
+    def on_log_status(self, message: str, level: str = "info"):
+        """状态日志槽函数"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        # 根据级别设置颜色
+        color_map = {
+            'info': 'black',
+            'success': 'green',
+            'warning': 'orange',
+            'error': 'red'
+        }
+        
+        color = color_map.get(level, 'black')
+        
+        # 插入日志
+        self.status_text.append(f'<span style="color:{color}">[{timestamp}] {message}</span>')
+        
+        # 滚动到底部
+        scrollbar = self.status_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+    
     def show_preview(self):
         """显示预览"""
-        if self.on_preview_callback:
-            self.on_preview_callback()
+        self.preview_requested.emit()
     
     def show_settings(self):
         """显示设置"""
-        if self.on_settings_callback:
-            self.on_settings_callback()
+        self.settings_requested.emit()
     
     def show_about(self):
         """显示关于信息"""
@@ -297,7 +383,7 @@ class MainWindow:
 开发者：Feishu2MD Tool
 版本：1.0.0"""
         
-        messagebox.showinfo("关于", about_text)
+        QMessageBox.about(self, "关于", about_text)
     
     def log_status(self, message: str, level: str = "info"):
         """记录状态日志
@@ -306,8 +392,6 @@ class MainWindow:
             message: 日志消息
             level: 日志级别 (info, success, warning, error)
         """
-        import datetime
-        
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         
         # 根据级别设置颜色
@@ -321,60 +405,37 @@ class MainWindow:
         color = color_map.get(level, 'black')
         
         # 插入日志
-        self.status_text.config(state=tk.NORMAL)
-        self.status_text.insert(tk.END, f"[{timestamp}] {message}\n")
+        self.status_text.append(f'<span style="color:{color}">[{timestamp}] {message}</span>')
         
-        # 设置颜色（如果支持的话）
-        try:
-            line_start = self.status_text.index("end-2l")
-            line_end = self.status_text.index("end-1l")
-            self.status_text.tag_add(level, line_start, line_end)
-            self.status_text.tag_config(level, foreground=color)
-        except:
-            pass
-        
-        self.status_text.config(state=tk.DISABLED)
-        self.status_text.see(tk.END)
+        # 滚动到底部
+        scrollbar = self.status_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
     
     def clear_status_log(self):
         """清空状态日志"""
-        self.status_text.config(state=tk.NORMAL)
-        self.status_text.delete(1.0, tk.END)
-        self.status_text.config(state=tk.DISABLED)
+        self.status_text.clear()
         self.log_status("日志已清空")
-    
-    def set_convert_callback(self, callback: Callable):
-        """设置转换回调函数"""
-        self.on_convert_callback = callback
-    
-    def set_preview_callback(self, callback: Callable):
-        """设置预览回调函数"""
-        self.on_preview_callback = callback
-    
-    def set_settings_callback(self, callback: Callable):
-        """设置设置回调函数"""
-        self.on_settings_callback = callback
     
     def get_token(self) -> str:
         """获取当前输入的token"""
-        return self.token_var.get().strip()
+        return self.token_entry.text().strip()
     
     def get_document_id(self) -> str:
         """获取当前输入的document_id"""
-        return self.doc_id_var.get().strip()
+        return self.doc_id_entry.text().strip()
     
     def set_token(self, token: str):
         """设置token"""
-        self.token_var.set(token)
+        self.token_entry.setText(token)
     
     def set_document_id(self, doc_id: str):
         """设置document_id"""
-        self.doc_id_var.set(doc_id)
+        self.doc_id_entry.setText(doc_id)
     
     def browse_output_path(self):
         """浏览输出路径"""
         # 获取当前路径作为初始目录
-        current_path = self.output_path_var.get().strip()
+        current_path = self.output_path_entry.text().strip()
         if current_path and os.path.exists(current_path):
             if os.path.isfile(current_path):
                 initial_dir = os.path.dirname(current_path)
@@ -387,33 +448,28 @@ class MainWindow:
             initial_file = ""
         
         # 选择保存文件路径
-        file_path = filedialog.asksaveasfilename(
-            title="选择输出文件路径",
-            initialdir=initial_dir,
-            initialfile=initial_file,
-            defaultextension=".md",
-            filetypes=[
-                ("Markdown文件", "*.md"),
-                ("文本文件", "*.txt"),
-                ("所有文件", "*.*")
-            ]
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "选择输出文件路径",
+            initial_dir + "/" + initial_file if initial_file else initial_dir,
+            "Markdown文件 (*.md);;文本文件 (*.txt);;所有文件 (*.*)"
         )
         
         if file_path:
-            self.output_path_var.set(file_path)
+            self.output_path_entry.setText(file_path)
             self.log_status(f"已选择输出路径: {file_path}")
     
     def use_default_path(self):
         """使用默认输出路径"""
         from pathlib import Path
         default_dir = Path.home() / "Documents" / "Feishu2MD" / "output"
-        self.output_path_var.set(str(default_dir))
+        self.output_path_entry.setText(str(default_dir))
         self.log_status(f"已设置为默认输出路径: {default_dir}")
     
     def get_output_path(self) -> str:
         """获取当前设置的输出路径"""
-        return self.output_path_var.get().strip()
+        return self.output_path_entry.text().strip()
     
     def set_output_path(self, path: str):
         """设置输出路径"""
-        self.output_path_var.set(path)
+        self.output_path_entry.setText(path)

@@ -1,25 +1,257 @@
-"""预览窗口模块"""
-import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, filedialog
+"""预览窗口模块 - PyQt6版本"""
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QWidget, 
+                            QPushButton, QTextEdit, QTabWidget, QLabel,
+                            QFileDialog, QMessageBox, QSplitter)
+from PyQt6.QtCore import Qt, QRegularExpression
+from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 import os
+import re
 from typing import Optional
 
 
-class PreviewWindow:
-    """预览窗口类"""
+class MarkdownHighlighter(QSyntaxHighlighter):
+    """Markdown语法高亮器"""
     
-    def __init__(self, parent: tk.Tk):
+    def __init__(self, document):
+        super().__init__(document)
+        
+        # 定义格式
+        self.heading_format = QTextCharFormat()
+        self.heading_format.setFontWeight(QFont.Weight.Bold)
+        self.heading_format.setForeground(QColor("#0066CC"))
+        
+        self.bold_format = QTextCharFormat()
+        self.bold_format.setFontWeight(QFont.Weight.Bold)
+        
+        self.italic_format = QTextCharFormat()
+        self.italic_format.setFontItalic(True)
+        
+        self.code_format = QTextCharFormat()
+        self.code_format.setFontFamily("Consolas")
+        self.code_format.setFontPointSize(10)
+        self.code_format.setBackground(QColor("#F5F5F5"))
+        
+        self.link_format = QTextCharFormat()
+        self.link_format.setForeground(QColor("#0066CC"))
+        self.link_format.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SingleUnderline)
+        
+        self.list_format = QTextCharFormat()
+        self.list_format.setForeground(QColor("#666666"))
+        
+        # 定义规则
+        self.rules = [
+            # 标题
+            (r'^#{1,6}\s+.+$', self.heading_format),
+            # 粗体
+            (r'\*\*[^*]+\*\*', self.bold_format),
+            # 斜体
+            (r'\*[^*]+\*', self.italic_format),
+            # 行内代码
+            (r'`[^`]+`', self.code_format),
+            # 链接
+            (r'\[.+\]\(.+\)', self.link_format),
+            # 无序列表
+            (r'^[\-\*]\s+.+$', self.list_format),
+            # 有序列表
+            (r'^\d+\.\s+.+$', self.list_format),
+        ]
+    
+    def highlightBlock(self, text: str):
+        """高亮文本块"""
+        for pattern, format in self.rules:
+            regex = QRegularExpression(pattern)
+            matches = regex.globalMatch(text)
+            
+            while matches.hasNext():
+                match = matches.next()
+                self.setFormat(match.capturedStart(), match.capturedLength(), format)
+
+
+class PreviewWindow(QDialog):
+    """预览窗口类 - PyQt6版本"""
+    
+    def __init__(self, parent=None):
         """初始化预览窗口
         
         Args:
             parent: 父窗口
         """
-        self.parent = parent
-        self.window: Optional[tk.Toplevel] = None
+        super().__init__(parent)
+        
         self.markdown_content = ""
         self.file_path = ""
         
-    def show(self, markdown_content: str, file_path: str = ""):
+        # 设置窗口属性
+        self.setup_window()
+        
+        # 初始化UI
+        self.init_ui()
+        
+        # 设置连接
+        self.setup_connections()
+    
+    def setup_window(self):
+        """设置窗口属性"""
+        self.setWindowTitle("Markdown预览")
+        self.setGeometry(150, 150, 900, 700)
+        self.setModal(False)  # 非模态对话框
+        
+        # 设置窗口图标（如果有的话）
+        try:
+            # self.setWindowIcon(QIcon('icon.ico'))
+            pass
+        except:
+            pass
+    
+    def init_ui(self):
+        """初始化界面组件"""
+        # 创建主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # 工具栏
+        toolbar_layout = QHBoxLayout()
+        
+        self.save_btn = QPushButton("保存为...")
+        self.save_copy_btn = QPushButton("另存为")
+        self.copy_btn = QPushButton("复制到剪贴板")
+        self.refresh_btn = QPushButton("刷新")
+        
+        toolbar_layout.addWidget(self.save_btn)
+        toolbar_layout.addWidget(self.save_copy_btn)
+        toolbar_layout.addWidget(self.copy_btn)
+        toolbar_layout.addWidget(self.refresh_btn)
+        toolbar_layout.addStretch()
+        
+        self.close_btn = QPushButton("关闭")
+        toolbar_layout.addWidget(self.close_btn)
+        
+        main_layout.addLayout(toolbar_layout)
+        
+        # 文件信息标签
+        self.file_info_label = QLabel("")
+        self.file_info_label.setStyleSheet("color: gray;")
+        toolbar_layout.addWidget(self.file_info_label, alignment=Qt.AlignmentFlag.AlignRight)
+        
+        # 创建分割器
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        
+        # 创建Notebook用于切换视图
+        self.tab_widget = QTabWidget()
+        
+        # Markdown源码视图
+        self.source_widget = QWidget()
+        source_layout = QVBoxLayout(self.source_widget)
+        source_layout.setContentsMargins(5, 5, 5, 5)
+        
+        self.source_text = QTextEdit()
+        self.source_text.setFont(QFont("Consolas", 10))
+        self.source_text.setTabStopDistance(40)  # 设置制表符距离
+        
+        # 设置语法高亮
+        self.highlighter = MarkdownHighlighter(self.source_text.document())
+        
+        source_layout.addWidget(self.source_text)
+        self.tab_widget.addTab(self.source_widget, "Markdown源码")
+        
+        # 渲染预览视图
+        self.preview_widget = QWidget()
+        preview_layout = QVBoxLayout(self.preview_widget)
+        preview_layout.setContentsMargins(5, 5, 5, 5)
+        
+        self.preview_text = QTextEdit()
+        self.preview_text.setFont(QFont("Arial", 10))
+        self.preview_text.setReadOnly(True)
+        
+        preview_layout.addWidget(self.preview_text)
+        self.tab_widget.addTab(self.preview_widget, "预览")
+        
+        splitter.addWidget(self.tab_widget)
+        
+        # 统计信息框架
+        stats_widget = QWidget()
+        stats_layout = QHBoxLayout(stats_widget)
+        
+        self.stats_label = QLabel("")
+        self.stats_label.setStyleSheet("color: gray;")
+        stats_layout.addWidget(self.stats_label)
+        stats_layout.addStretch()
+        
+        splitter.addWidget(stats_widget)
+        
+        # 设置分割器比例
+        splitter.setSizes([600, 50])
+        
+        main_layout.addWidget(splitter)
+        
+        # 设置样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+            }
+            
+            QPushButton {
+                min-width: 80px;
+                padding: 5px 15px;
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                background-color: #ffffff;
+            }
+            
+            QPushButton:hover {
+                background-color: #f5f5f5;
+            }
+            
+            QPushButton:pressed {
+                background-color: #e6e6e6;
+            }
+            
+            QTextEdit {
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            
+            QTabWidget::pane {
+                border: 1px solid #d9d9d9;
+                border-radius: 4px;
+            }
+            
+            QTabBar::tab {
+                background-color: #f0f0f0;
+                border: 1px solid #d9d9d9;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                padding: 5px 15px;
+                margin-right: 2px;
+            }
+            
+            QTabBar::tab:selected {
+                background-color: #ffffff;
+                border-bottom: 1px solid #ffffff;
+            }
+            
+            QSplitter::handle {
+                background-color: #d9d9d9;
+                height: 2px;
+            }
+        """)
+    
+    def setup_connections(self):
+        """设置信号槽连接"""
+        # 按钮点击事件
+        self.save_btn.clicked.connect(self.save_as)
+        self.save_copy_btn.clicked.connect(self.save_copy)
+        self.copy_btn.clicked.connect(self.copy_to_clipboard)
+        self.refresh_btn.clicked.connect(self.refresh)
+        self.close_btn.clicked.connect(self.close)
+        
+        # 标签切换事件
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+    
+    def show(self, markdown_content: str = "", file_path: str = ""):
         """显示预览窗口
         
         Args:
@@ -29,132 +261,20 @@ class PreviewWindow:
         self.markdown_content = markdown_content
         self.file_path = file_path
         
-        if self.window is None or not self.window.winfo_exists():
-            self._create_window()
-        else:
-            self.window.lift()
-            self.window.focus_force()
-        
         # 更新内容
         self._update_content()
-    
-    def _create_window(self):
-        """创建预览窗口"""
-        self.window = tk.Toplevel(self.parent)
-        self.window.title("Markdown预览")
-        self.window.geometry("900x700")
-        self.window.resizable(True, True)
         
-        # 设置窗口图标（与主窗口一致）
-        try:
-            # self.window.iconbitmap('icon.ico')
-            pass
-        except:
-            pass
+        # 显示窗口
+        super().show()
         
-        # 创建主框架
-        main_frame = ttk.Frame(self.window, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 工具栏
-        toolbar_frame = ttk.Frame(main_frame)
-        toolbar_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        # 保存按钮
-        self.save_btn = ttk.Button(toolbar_frame, text="保存为...", 
-                                 command=self.save_as)
-        self.save_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # 另存为按钮
-        self.save_copy_btn = ttk.Button(toolbar_frame, text="另存为", 
-                                      command=self.save_copy)
-        self.save_copy_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # 复制到剪贴板按钮
-        self.copy_btn = ttk.Button(toolbar_frame, text="复制到剪贴板", 
-                                 command=self.copy_to_clipboard)
-        self.copy_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # 刷新按钮
-        self.refresh_btn = ttk.Button(toolbar_frame, text="刷新", 
-                                    command=self.refresh)
-        self.refresh_btn.pack(side=tk.LEFT)
-        
-        # 关闭按钮
-        self.close_btn = ttk.Button(toolbar_frame, text="关闭", 
-                                  command=self.close)
-        self.close_btn.pack(side=tk.RIGHT)
-        
-        # 文件信息标签
-        self.file_info_label = ttk.Label(toolbar_frame, text="", 
-                                       foreground="gray")
-        self.file_info_label.pack(side=tk.RIGHT, padx=(0, 10))
-        
-        # 创建Notebook用于切换视图
-        self.notebook = ttk.Notebook(main_frame)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Markdown源码视图
-        self.source_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.source_frame, text="Markdown源码")
-        
-        # 源码文本区域
-        self.source_text = scrolledtext.ScrolledText(
-            self.source_frame, 
-            wrap=tk.WORD, 
-            font=('Consolas', 10),
-            tabs='1c'
-        )
-        self.source_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 渲染预览视图（简单的HTML-like显示）
-        self.preview_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.preview_frame, text="预览")
-        
-        # 预览文本区域
-        self.preview_text = scrolledtext.ScrolledText(
-            self.preview_frame, 
-            wrap=tk.WORD, 
-            font=('Arial', 10),
-            state=tk.DISABLED
-        )
-        self.preview_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 统计信息框架
-        stats_frame = ttk.Frame(main_frame)
-        stats_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        # 统计信息标签
-        self.stats_label = ttk.Label(stats_frame, text="", foreground="gray")
-        self.stats_label.pack(side=tk.LEFT)
-        
-        # 绑定事件
-        self.window.protocol("WM_DELETE_WINDOW", self.close)
-        
-        # 配置文本区域的语法高亮（简单版本）
-        self._setup_syntax_highlighting()
-    
-    def _setup_syntax_highlighting(self):
-        """设置简单的语法高亮"""
-        # 配置标签样式
-        self.source_text.tag_configure("heading", font=('Consolas', 10, 'bold'), foreground="#0066CC")
-        self.source_text.tag_configure("bold", font=('Consolas', 10, 'bold'))
-        self.source_text.tag_configure("italic", font=('Consolas', 10, 'italic'))
-        self.source_text.tag_configure("code", font=('Consolas', 9), background="#F5F5F5")
-        self.source_text.tag_configure("link", foreground="#0066CC", underline=True)
-        self.source_text.tag_configure("list", foreground="#666666")
+        # 激活窗口
+        self.raise_()
+        self.activateWindow()
     
     def _update_content(self):
         """更新内容显示"""
-        if not self.window or not self.window.winfo_exists():
-            return
-        
         # 更新源码视图
-        self.source_text.delete(1.0, tk.END)
-        self.source_text.insert(1.0, self.markdown_content)
-        
-        # 应用简单的语法高亮
-        self._apply_syntax_highlighting()
+        self.source_text.setPlainText(self.markdown_content)
         
         # 更新预览视图
         self._update_preview()
@@ -162,70 +282,18 @@ class PreviewWindow:
         # 更新文件信息
         if self.file_path:
             filename = os.path.basename(self.file_path)
-            self.file_info_label.config(text=f"文件: {filename}")
+            self.file_info_label.setText(f"文件: {filename}")
         else:
-            self.file_info_label.config(text="未保存")
+            self.file_info_label.setText("未保存")
         
         # 更新统计信息
         self._update_stats()
     
-    def _apply_syntax_highlighting(self):
-        """应用简单的语法高亮"""
-        content = self.source_text.get(1.0, tk.END)
-        lines = content.split('\n')
-        
-        for i, line in enumerate(lines):
-            line_start = f"{i+1}.0"
-            line_end = f"{i+1}.end"
-            
-            # 标题
-            if line.startswith('#'):
-                self.source_text.tag_add("heading", line_start, line_end)
-            
-            # 粗体
-            if '**' in line:
-                start_pos = 0
-                while True:
-                    start_idx = line.find('**', start_pos)
-                    if start_idx == -1:
-                        break
-                    end_idx = line.find('**', start_idx + 2)
-                    if end_idx == -1:
-                        break
-                    
-                    tag_start = f"{i+1}.{start_idx}"
-                    tag_end = f"{i+1}.{end_idx + 2}"
-                    self.source_text.tag_add("bold", tag_start, tag_end)
-                    start_pos = end_idx + 2
-            
-            # 代码块
-            if '`' in line:
-                start_pos = 0
-                while True:
-                    start_idx = line.find('`', start_pos)
-                    if start_idx == -1:
-                        break
-                    end_idx = line.find('`', start_idx + 1)
-                    if end_idx == -1:
-                        break
-                    
-                    tag_start = f"{i+1}.{start_idx}"
-                    tag_end = f"{i+1}.{end_idx + 1}"
-                    self.source_text.tag_add("code", tag_start, tag_end)
-                    start_pos = end_idx + 1
-            
-            # 链接
-            if '[' in line and '](' in line:
-                self.source_text.tag_add("link", line_start, line_end)
-            
-            # 列表
-            if line.strip().startswith(('-', '*', '+')) or line.strip().startswith(tuple(f"{i}." for i in range(10))):
-                self.source_text.tag_add("list", line_start, line_end)
-    
     def _update_preview(self):
         """更新预览视图（简单的文本渲染）"""
-        self.preview_text.config(state=tk.NORMAL)
-        self.preview_text.delete(1.0, tk.END)
+        if not self.markdown_content:
+            self.preview_text.clear()
+            return
         
         # 简单的markdown渲染
         lines = self.markdown_content.split('\n')
@@ -265,13 +333,12 @@ class PreviewWindow:
                 rendered_lines.append(line)
         
         preview_content = '\n'.join(rendered_lines)
-        self.preview_text.insert(1.0, preview_content)
-        self.preview_text.config(state=tk.DISABLED)
+        self.preview_text.setPlainText(preview_content)
     
     def _update_stats(self):
         """更新统计信息"""
         if not self.markdown_content:
-            self.stats_label.config(text="")
+            self.stats_label.setText("")
             return
         
         lines = len(self.markdown_content.split('\n'))
@@ -279,12 +346,19 @@ class PreviewWindow:
         words = len(self.markdown_content.split())
         
         stats_text = f"行数: {lines} | 字符数: {chars} | 单词数: {words}"
-        self.stats_label.config(text=stats_text)
+        self.stats_label.setText(stats_text)
+    
+    def on_tab_changed(self, index: int):
+        """标签切换事件"""
+        # 如果切换到源码标签，重新应用语法高亮
+        if index == 0:  # 源码标签
+            # 重新应用高亮
+            self.highlighter.rehighlight()
     
     def save_as(self):
         """另存为文件"""
         if not self.markdown_content:
-            messagebox.showwarning("警告", "没有内容可保存")
+            QMessageBox.warning(self, "警告", "没有内容可保存")
             return
         
         # 获取默认文件名
@@ -292,11 +366,11 @@ class PreviewWindow:
         if self.file_path:
             default_name = os.path.basename(self.file_path)
         
-        file_path = filedialog.asksaveasfilename(
-            title="保存Markdown文件",
-            defaultextension=".md",
-            filetypes=[("Markdown文件", "*.md"), ("所有文件", "*.*")],
-            initialname=default_name
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存Markdown文件",
+            default_name,
+            "Markdown文件 (*.md);;所有文件 (*.*)"
         )
         
         if file_path:
@@ -306,14 +380,14 @@ class PreviewWindow:
                 
                 self.file_path = file_path
                 self._update_content()  # 更新文件信息显示
-                messagebox.showinfo("成功", f"文件已保存到: {file_path}")
+                QMessageBox.information(self, "成功", f"文件已保存到: {file_path}")
             except Exception as e:
-                messagebox.showerror("错误", f"保存文件失败: {str(e)}")
+                QMessageBox.critical(self, "错误", f"保存文件失败: {str(e)}")
     
     def save_copy(self):
         """保存副本"""
         if not self.markdown_content:
-            messagebox.showwarning("警告", "没有内容可保存")
+            QMessageBox.warning(self, "警告", "没有内容可保存")
             return
         
         # 生成默认文件名
@@ -323,11 +397,11 @@ class PreviewWindow:
         else:
             default_name = "document_copy.md"
         
-        file_path = filedialog.asksaveasfilename(
-            title="保存副本",
-            defaultextension=".md",
-            filetypes=[("Markdown文件", "*.md"), ("所有文件", "*.*")],
-            initialname=default_name
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存副本",
+            default_name,
+            "Markdown文件 (*.md);;所有文件 (*.*)"
         )
         
         if file_path:
@@ -335,34 +409,28 @@ class PreviewWindow:
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(self.markdown_content)
                 
-                messagebox.showinfo("成功", f"副本已保存到: {file_path}")
+                QMessageBox.information(self, "成功", f"副本已保存到: {file_path}")
             except Exception as e:
-                messagebox.showerror("错误", f"保存副本失败: {str(e)}")
+                QMessageBox.critical(self, "错误", f"保存副本失败: {str(e)}")
     
     def copy_to_clipboard(self):
         """复制到剪贴板"""
         if not self.markdown_content:
-            messagebox.showwarning("警告", "没有内容可复制")
+            QMessageBox.warning(self, "警告", "没有内容可复制")
             return
         
         try:
-            self.window.clipboard_clear()
-            self.window.clipboard_append(self.markdown_content)
-            messagebox.showinfo("成功", "内容已复制到剪贴板")
+            clipboard = QApplication.clipboard()
+            clipboard.setText(self.markdown_content)
+            QMessageBox.information(self, "成功", "内容已复制到剪贴板")
         except Exception as e:
-            messagebox.showerror("错误", f"复制失败: {str(e)}")
+            QMessageBox.critical(self, "错误", f"复制失败: {str(e)}")
     
     def refresh(self):
         """刷新显示"""
         self._update_content()
-        messagebox.showinfo("提示", "预览已刷新")
-    
-    def close(self):
-        """关闭窗口"""
-        if self.window:
-            self.window.destroy()
-            self.window = None
+        QMessageBox.information(self, "提示", "预览已刷新")
     
     def is_open(self) -> bool:
         """检查窗口是否打开"""
-        return self.window is not None and self.window.winfo_exists()
+        return self.isVisible()
