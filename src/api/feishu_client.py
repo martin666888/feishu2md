@@ -1,10 +1,16 @@
 """飞书API客户端模块"""
 import json
+from lark_oapi.api.drive.v1.model.batch_get_tmp_download_url_media_response import BatchGetTmpDownloadUrlMediaResponse
+from lark_oapi.core.model.request_option import RequestOption
+from lark_oapi.api.drive.v1.model.batch_get_tmp_download_url_media_request import BatchGetTmpDownloadUrlMediaRequest
 from typing import Dict, List, Optional, Any
 from lark_oapi import Client, RequestOption
+import lark_oapi
 from lark_oapi.api.docx import *
 from lark_oapi.api.docx.v1 import *
+from lark_oapi.api.drive.v1 import *
 from lark_oapi.core.model import BaseResponse
+import logging
 
 
 class FeishuAPIClient:
@@ -16,8 +22,9 @@ class FeishuAPIClient:
         Args:
             user_access_token: 用户访问令牌
         """
-        self.client = Client.builder().enable_set_token(True).build()
+        self.client: lark_oapi.Client = Client.builder().enable_set_token(True).build()
         self.user_access_token = user_access_token
+        self.logger = logging.getLogger(__name__)
     
     def get_document_info(self, document_id: str) -> Dict[str, Any]:
         """获取文档信息
@@ -41,19 +48,22 @@ class FeishuAPIClient:
             option = RequestOption.builder().user_access_token(self.user_access_token).build()
             
             # 发起请求
-            response: GetDocumentResponse = self.client.docx.v1.document.get(request, option)
+            response: GetDocumentResponse = self.client.docx.v1.document.get(request, option)  # type: ignore
             
             # 检查响应
             if not response.success():
                 raise Exception(f"API调用失败: {response.code} - {response.msg}")
             
             # 返回文档信息
-            document = response.data.document
-            return {
-                'document_id': document.document_id,
-                'revision_id': document.revision_id,
-                'title': document.title or f'Document_{document_id[:8]}'
-            }
+            if response.data and response.data.document:
+                document = response.data.document
+                return {
+                    'document_id': document.document_id,
+                    'revision_id': document.revision_id,
+                    'title': document.title or f'Document_{document_id[:8]}'
+                }
+            else:
+                raise Exception("响应数据为空")
             
         except Exception as e:
             raise Exception(f"获取文档信息失败: {str(e)}")
@@ -82,25 +92,28 @@ class FeishuAPIClient:
             option = RequestOption.builder().user_access_token(self.user_access_token).build()
             
             # 发起请求
-            response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)
+            response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)  # type: ignore  # type: ignore
             
             # 检查响应
             if not response.success():
                 raise Exception(f"API调用失败: {response.code} - {response.msg}")
             
             # 返回数据
-            result = {
-                'code': response.code,
-                'msg': response.msg,
-                'data': {
-                    'has_more': response.data.has_more,
-                    'page_token': response.data.page_token,
-                    'items': []
+            if response.data:
+                result = {
+                    'code': response.code,
+                    'msg': response.msg,
+                    'data': {
+                        'has_more': response.data.has_more,
+                        'page_token': response.data.page_token,
+                        'items': []
+                    }
                 }
-            }
+            else:
+                raise Exception("响应数据为空")
             
             # 转换块数据
-            if response.data.items:
+            if response.data and response.data.items:
                 for block in response.data.items:
                     block_data = {
                         'block_id': block.block_id,
@@ -180,12 +193,80 @@ class FeishuAPIClient:
         }
     
     def _convert_image_data(self, image) -> Dict[str, Any]:
-        """转换图片数据"""
-        return {
-            'token': image.token if hasattr(image, 'token') else '',
-            'width': image.width if hasattr(image, 'width') else 0,
-            'height': image.height if hasattr(image, 'height') else 0
-        }
+        """转换图片数据，获取下载链接"""
+        try:
+            token = image.token if hasattr(image, 'token') else ''
+            width = image.width if hasattr(image, 'width') else 0
+            height = image.height if hasattr(image, 'height') else 0
+            
+            # 获取下载链接
+            download_url = self._get_image_download_url(token)
+            
+            return {
+                'token': token,
+                'width': width,
+                'height': height,
+                'download_url': download_url
+            }
+        except Exception as e:
+            self.logger.warning(f"获取图片下载链接失败: {e}")
+            return {
+                'token': image.token if hasattr(image, 'token') else '',
+                'width': image.width if hasattr(image, 'width') else 0,
+                'height': image.height if hasattr(image, 'height') else 0,
+                'download_url': self._get_fallback_image_url(image.token if hasattr(image, 'token') else '')
+            }
+    
+    def _get_image_download_url(self, file_token: str) -> str:
+        """获取图片临时下载链接"""
+        if not file_token:
+            return self._get_fallback_image_url('')
+        
+        try:
+            # 构建请求
+            request: BatchGetTmpDownloadUrlMediaRequest = BatchGetTmpDownloadUrlMediaRequest.builder() \
+                .file_tokens([file_token]) \
+                .build()
+            
+            # 构建请求选项
+            option: RequestOption = RequestOption.builder().user_access_token(self.user_access_token).build()
+            
+            # 发起请求
+            response: BatchGetTmpDownloadUrlMediaResponse = self.client.drive.v1.media.batch_get_tmp_download_url(request, option)  # type: ignore
+            
+            # 检查响应
+            if not response.success():
+                raise Exception(f"API调用失败: {response.code} - {response.msg}")
+            
+            # 解析响应获取下载链接
+            # 获取的图片链接只有24h时效
+            if response.data and hasattr(response.data, 'tmp_download_urls') and response.data.tmp_download_urls:
+                for url_info in response.data.tmp_download_urls:
+                    if hasattr(url_info, 'file_token') and hasattr(url_info, 'tmp_download_url'):
+                        if url_info.file_token == file_token and getattr(url_info, 'tmp_download_url', None):
+                            return getattr(url_info, 'tmp_download_url')  # type: ignore
+            
+            # 如果没有找到对应的URL，使用备用方案
+            raise Exception("未找到对应的下载链接")
+            
+        except Exception as e:
+            self.logger.warning(f"获取图片下载链接失败: {e}")
+            return self._get_fallback_image_url(file_token)
+    
+    def _get_fallback_image_url(self, file_token: str) -> str:
+        """获取备用图片URL"""
+        if not file_token:
+            return "[INVALID_IMAGE_TOKEN]"
+        
+        # 尝试多种备用URL格式
+        fallback_urls = [
+            f'https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/{file_token}/',
+            f'https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code={file_token}',
+            f'[IMAGE_URL_FAILED:{file_token[:8]}...]'  # 最终占位符
+        ]
+        
+        # 返回第一个备用URL
+        return fallback_urls[0]
     
     def _convert_table_data(self, table) -> Dict[str, Any]:
         """转换表格数据"""
@@ -296,13 +377,13 @@ class FeishuAPIClient:
             option = RequestOption.builder().user_access_token(self.user_access_token).build()
             
             # 发起请求
-            response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)
+            response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)  # type: ignore  # type: ignore
             
             if not response.success():
                 raise Exception(f"API调用失败: {response.code} - {response.msg}")
             
             # 添加当前页的块
-            if response.data.items:
+            if response.data and response.data.items:
                 for block in response.data.items:
                     block_data = {
                         'block_id': block.block_id,
@@ -321,9 +402,12 @@ class FeishuAPIClient:
                     all_blocks.append(block_data)
             
             # 检查是否还有更多数据
-            if not response.data.has_more:
+            if response.data and not response.data.has_more:
                 break
                 
-            page_token = response.data.page_token
+            if response.data:
+                page_token = response.data.page_token
+            else:
+                break
         
         return all_blocks

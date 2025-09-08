@@ -820,12 +820,16 @@ class MarkdownConverter:
                 self.logger.warning("图片token无效")
                 return ''
             
+            # 获取图片下载链接（优先使用API获取的链接）
+            download_url: str = image_data.get('download_url', '')
+            if not isinstance(download_url, str) or not download_url.strip():
+                # 如果没有download_url，使用备用方案
+                self.logger.warning("图片下载链接为空，使用备用URL")
+                download_url = f'https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/{token}/'
+            
             # 获取图片宽度和高度（可选）
             width: Optional[Union[int, float]] = image_data.get('width')
             height: Optional[Union[int, float]] = image_data.get('height')
-            
-            # 构建图片URL
-            image_url: str = f'https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/preview/{token}/'
             
             # 生成alt文本
             alt_text: str = f'image-{token[:8]}'
@@ -834,13 +838,14 @@ class MarkdownConverter:
             if isinstance(width, (int, float)) and isinstance(height, (int, float)):
                 alt_text += f' ({int(width)}x{int(height)})'
             
-            return f'![{alt_text}]({image_url})'
+            # 构建Markdown图片语法，并添加两个换行符确保段落分隔
+            return f'![{alt_text}]({download_url})\n\n'
             
         except Exception as e:
             self.logger.error(f"转换图片块时出错: {e}")
-            return ''
+            return '[IMAGE_CONVERSION_ERROR]\n\n'
     
-    def _convert_table_block(self, block: BlockData, block_map: BlockMap = None) -> str:
+    def _convert_table_block(self, block: BlockData, block_map: Optional[BlockMap] = None) -> str:
         """转换表格块
         
         Args:
@@ -1018,7 +1023,7 @@ class MarkdownConverter:
         
         return row_size, column_size
     
-    def _build_table_matrix_new(self, cells: List[str], row_size: int, column_size: int, block_map: BlockMap = None) -> List[List[str]]:
+    def _build_table_matrix_new(self, cells: List[str], row_size: int, column_size: int, block_map: Optional[BlockMap] = None) -> List[List[str]]:
         """构建表格矩阵（新版本）
         
         Args:
@@ -1064,7 +1069,7 @@ class MarkdownConverter:
         
         return matrix
     
-    def _build_table_matrix(self, cells: List[Dict[str, Any]], row_size: int, column_size: int, block_map: BlockMap = None) -> List[List[str]]:
+    def _build_table_matrix(self, cells: List[Dict[str, Any]], row_size: int, column_size: int, block_map: Optional[BlockMap] = None) -> List[List[str]]:
         """构建表格矩阵（旧版本，保持兼容性）
         
         Args:
@@ -1253,7 +1258,7 @@ class MarkdownConverter:
         
         return ''.join(text_parts)
     
-    def _extract_cell_content(self, cell: Dict[str, Any], block_map: BlockMap = None) -> str:
+    def _extract_cell_content(self, cell: Dict[str, Any], block_map: Optional[BlockMap] = None) -> str:
         """提取单元格内容（旧版本，保持兼容性）
         
         Args:
