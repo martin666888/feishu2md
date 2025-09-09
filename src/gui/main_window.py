@@ -327,8 +327,9 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "成功", "文档转换完成！")
         else:
             self.progress_bar.setValue(0)
+            # 仅在状态信息栏展示错误，不再弹出对话框
             self.log_status(f"转换失败: {message}", "error")
-            QMessageBox.critical(self, "错误", f"转换失败: {message}")
+            # 删除错误弹窗：不再调用 QMessageBox.critical(self, "错误", f"转换失败: {message}")
     
     @pyqtSlot(float, str)
     def on_update_progress(self, value: float, message: str = ""):
@@ -370,9 +371,10 @@ class MainWindow(QMainWindow):
     def show_about(self):
         """显示关于信息"""
         about_text = """飞书文档转Markdown工具 v1.0.0
+Lark2MD v1.0.0
 
 这是一个基于飞书开放平台API的桌面应用程序，
-帮助用户将飞书文档快速转换为标准markdown格式文件。
+帮助用户将飞书知识库云文档快速转换为标准markdown格式文件。
 
 功能特点：
 • 支持多种块类型转换
@@ -380,7 +382,9 @@ class MainWindow(QMainWindow):
 • 提供预览和保存功能
 • 简洁易用的界面
 
-开发者：Feishu2MD Tool
+开发者：Martin
+邮箱：hunyuma5@gmail.com
+GitHub：https://github.com/martin666888/feishu2md
 版本：1.0.0"""
         
         QMessageBox.about(self, "关于", about_text)
@@ -433,31 +437,27 @@ class MainWindow(QMainWindow):
         self.doc_id_entry.setText(doc_id)
     
     def browse_output_path(self):
-        """浏览输出路径"""
+        """浏览输出路径（选择目录，文件名由 FileManager 自动生成）"""
         # 获取当前路径作为初始目录
         current_path = self.output_path_entry.text().strip()
         if current_path and os.path.exists(current_path):
             if os.path.isfile(current_path):
                 initial_dir = os.path.dirname(current_path)
-                initial_file = os.path.basename(current_path)
             else:
                 initial_dir = current_path
-                initial_file = ""
         else:
             initial_dir = os.path.expanduser("~/Documents")
-            initial_file = ""
         
-        # 选择保存文件路径
-        file_path, _ = QFileDialog.getSaveFileName(
+        # 只选择目录
+        directory = QFileDialog.getExistingDirectory(
             self,
-            "选择输出文件路径",
-            initial_dir + "/" + initial_file if initial_file else initial_dir,
-            "Markdown文件 (*.md);;文本文件 (*.txt);;所有文件 (*.*)"
+            "选择输出目录",
+            initial_dir
         )
         
-        if file_path:
-            self.output_path_entry.setText(file_path)
-            self.log_status(f"已选择输出路径: {file_path}")
+        if directory:
+            self.output_path_entry.setText(directory)
+            self.log_status(f"已选择输出目录: {directory}")
     
     def use_default_path(self):
         """使用默认输出路径"""

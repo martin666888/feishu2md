@@ -23,7 +23,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='飞书文档转Markdown',
+    name='Lark2MD',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

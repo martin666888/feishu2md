@@ -172,11 +172,30 @@ class AppController(QObject):
             
         except Exception as e:
             error_msg = str(e)
-            self._update_status_gui(f"转换失败: {error_msg}", "error")
-            self._update_conversion_complete_gui(False, error_msg)
+            friendly_msg = self._format_friendly_error(error_msg)
+            self._update_status_gui(friendly_msg, "error")
+            self._update_conversion_complete_gui(False, friendly_msg)
             
             # 记录详细错误信息
             traceback.print_exc()
+
+    def _format_friendly_error(self, error_msg: str) -> str:
+        """将底层异常信息转化为更友好的提示文案"""
+        msg_lower = error_msg.lower()
+        # 飞书参数错误：99992402 或者包含中文提示
+        if ("99992402" in error_msg) or ("请求参数缺失" in error_msg) or ("请求参数有误" in error_msg):
+            return "document_id不对或请求参数有误（错误码 99992402），请检查输入的文档ID。"
+        # 令牌过期：99991677 或相似英文提示
+        if ("99991677" in error_msg) or ("authentication token expired" in msg_lower) or ("token expired" in msg_lower) or ("access token expired" in msg_lower):
+            return "认证失败：用户访问令牌已过期（错误码 99991677），请重新获取或更新 User Access Token。"
+        # 认证失败
+        if ("401" in error_msg) or ("unauthorized" in msg_lower) or ("invalid token" in msg_lower):
+            return "认证失败，请检查用户访问令牌（token）是否正确或已过期。"
+        # 超时或网络问题
+        if ("timeout" in msg_lower) or ("timed out" in msg_lower) or ("connection" in msg_lower and "error" in msg_lower):
+            return "网络异常或超时，请检查网络后重试。"
+        # 默认回退
+        return f"转换失败: {error_msg}"
     
     def _update_progress_gui(self, value: float, message: str = ""):
         """线程安全的进度更新"""
