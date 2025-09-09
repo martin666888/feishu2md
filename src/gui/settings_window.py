@@ -92,7 +92,7 @@ class SettingsWindow(QDialog):
         self.vars['file_naming_pattern'] = QLineEdit()
         naming_layout.addWidget(self.vars['file_naming_pattern'])
         
-        pattern_hint = QLabel("可用变量: {title}, {timestamp}, {doc_id}")
+        pattern_hint = QLabel("可用变量: 文件名：{title}； 时间戳：{timestamp}； 文档ID：{doc_id}")
         pattern_hint.setStyleSheet("color: gray;")
         naming_layout.addWidget(pattern_hint)
         
@@ -287,7 +287,16 @@ class SettingsWindow(QDialog):
             # 更新设置
             self.file_manager.update_settings(new_settings)
             
+            # 成功提示
             QMessageBox.information(self, "成功", "设置已保存")
+            
+            # 如果主界面提供了刷新默认路径的方法，则同步一次
+            try:
+                if self.parent() and hasattr(self.parent(), 'use_default_path'):
+                    self.parent().use_default_path()
+            except Exception:
+                pass
+            
             self.close()
             
         except Exception as e:

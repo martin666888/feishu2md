@@ -27,6 +27,8 @@ class MainWindow(QMainWindow):
         
         # 状态变量
         self.is_converting = False
+        # 新增：默认目录提供器，由控制器注入
+        self._default_dir_provider: Optional[Callable[[], str]] = None
         
         # 设置窗口属性
         self.setup_window()
@@ -240,10 +242,14 @@ class MainWindow(QMainWindow):
         self.convert_btn.clicked.connect(self.start_conversion)
         self.preview_btn.clicked.connect(self.show_preview)
         self.settings_btn.clicked.connect(self.show_settings)
+        # 移除不存在的 clear_log 槽
+        # self.clear_log_btn.clicked.connect(self.clear_log)
+        self.about_btn.clicked.connect(self.show_about)
         self.browse_btn.clicked.connect(self.browse_output_path)
         self.default_path_btn.clicked.connect(self.use_default_path)
         self.clear_log_btn.clicked.connect(self.clear_status_log)
-        self.about_btn.clicked.connect(self.show_about)
+        # 去重：about 按钮连接仅一次
+        # self.about_btn.clicked.connect(self.show_about)
         
         # 输入验证
         self.token_entry.textChanged.connect(self.validate_inputs)
@@ -459,10 +465,21 @@ GitHub：https://github.com/martin666888/feishu2md
             self.output_path_entry.setText(directory)
             self.log_status(f"已选择输出目录: {directory}")
     
+    def set_default_dir_provider(self, provider: Callable[[], str]):
+        """设置默认输出目录提供器（由控制器注入）"""
+        self._default_dir_provider = provider
+    
     def use_default_path(self):
         """使用默认输出路径"""
         from pathlib import Path
-        default_dir = Path.home() / "Documents" / "Feishu2MD" / "output"
+        default_dir = None
+        if hasattr(self, "_default_dir_provider") and self._default_dir_provider:
+            try:
+                default_dir = self._default_dir_provider()
+            except Exception:
+                default_dir = None
+        if not default_dir:
+            default_dir = Path.home() / "Documents" / "Feishu2MD" / "output"
         self.output_path_entry.setText(str(default_dir))
         self.log_status(f"已设置为默认输出路径: {default_dir}")
     

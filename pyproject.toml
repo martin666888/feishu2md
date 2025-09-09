@@ -5,7 +5,7 @@ description = "飞书文档转Markdown工具"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "lark-oapi>=1.2.0",
-    "pyqt6>=6.7.1",
-    "requests>=2.25.0",
+    "lark-oapi==1.4.22",
+    "pyqt6==6.9.1",
+    "requests==2.32.5",
 ]

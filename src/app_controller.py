@@ -65,6 +65,13 @@ class AppController(QObject):
         except Exception:
             pass
         
+        # 注入“默认目录提供器”：读取设置中的 default_output_dir
+        self.main_window.set_default_dir_provider(
+            lambda: self.file_manager.get_settings().get('default_output_dir') or str(self.file_manager.output_dir)
+        )
+        # 立即用设置里的默认目录刷新主界面输出路径
+        self.main_window.use_default_path()
+        
         # 数据
         self.current_markdown = ""
         self.current_title = ""

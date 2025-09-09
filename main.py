@@ -22,6 +22,14 @@ import os
 import traceback
 from pathlib import Path
 
+# 在导入任何可能触发该警告的第三方库之前，屏蔽 pkg_resources 弃用警告
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message=r".*pkg_resources is deprecated as an API.*",
+    category=UserWarning,
+)
+
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
