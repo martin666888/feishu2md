@@ -27,7 +27,7 @@ https://tsaae9fgrn.feishu.cn/wiki/KT5Xws**************dcRr1Fnfb?fromScene=spaceO
 
 当前版本程序只对知识库文档进行了转换测试，也就是具有**wiki**标签的链接，云文档链接暂未测试。
 ## user_access_token获取
-最简单的获取方式就是在官方调试API平台中获取。使用刚才创建的应用
+最简单的获取方式就是在官方调试API平台中获取，例如[获取文档所有块](https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/document/list)。使用刚才创建的应用
 
 ![](./screenShot/api调试台.png)
 ![](./screenShot/api调试台1.png)
