@@ -19,10 +19,11 @@
 **具备个人知识库访问权限的应用才能成功完成文档转换。**
 ## 文档document_id获取
 直接复制知识库原文档链接，例如：
+```
+https://tsaae9fgrn.feishu.cn/wiki/KT5Xws**************dcRr1Fnfb?fromScene=spaceOverview
+```
 
-https://tsaae9fgrn.feishu.cn/wiki/KT5Xws\*\*\*\*\*\*\*\*\*\*\*\*\*\*dcRr1Fnfb?fromScene=spaceOverview
-
-上述链接中，KT5Xws\*\*\*\*\*\*\*\*\*\*\*\*\*\*dcRr1Fnfb 就是 **知识库文档的 document_id**。
+上述链接中，wiki/后面，?之前的部分，KT5Xws**************dcRr1Fnfb 就是 **知识库文档的 document_id**。
 
 当前版本程序只对知识库文档进行了转换测试，也就是具有**wiki**标签的链接，云文档链接暂未测试。
 ## user_access_token获取
